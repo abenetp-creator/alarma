@@ -21,11 +21,15 @@ const estilBoto = {
   color: "#0f172a",
 };
 
-const estilLink = {
-  textDecoration: "none",
-  color: "inherit",
+const estilBotoBloquejat = {
+  ...estilBoto,
+  backgroundColor: "#1e293b",
+  color: "#64748b",
+  cursor: "not-allowed",
+  border: "1px solid #334155",
 };
 
+const estilLink = { textDecoration: "none", color: "inherit" };
 const DIES_MAP = ["dg", "dll", "dm", "dc", "dj", "dv", "ds"];
 
 export default function Home() {
@@ -33,37 +37,26 @@ export default function Home() {
   const [alarmesActives, setAlarmesActives] = useState(true);
   const [ultimTocSonat, setUltimTocSonat] = useState("");
 
-  // Els tocs funcionaran SEMPRE automàticament des de l'iPad
+  // Execució automàtica contínua
   useEffect(() => {
     if (!alarmesActives) return;
 
     const comprovarHoraToc = () => {
       const ara = new Date();
-      const horaActual = ara.toLocaleTimeString("ca-ES", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-
+      const horaActual = ara.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" });
       if (ultimTocSonat === horaActual) return;
 
       const diaSetmana = DIES_MAP[ara.getDay()];
       const tocsGuardats = JSON.parse(localStorage.getItem("tocs")) || [];
 
       const tocMatx = tocsGuardats.find(
-        (toc) =>
-          toc.actiu &&
-          toc.hora === horaActual &&
-          toc.dies &&
-          toc.dies.includes(diaSetmana)
+        (toc) => toc.actiu && toc.hora === horaActual && toc.dies?.includes(diaSetmana)
       );
 
       if (tocMatx) {
         setUltimTocSonat(horaActual);
-        const fitxerAudio = tocMatx.fitxerAudio || "/sounds/canvi.mp3";
-        const reproductor = new Audio(fitxerAudio);
-        reproductor.play().catch((err) => {
-          console.warn("Cal interacció prèvia de l'usuari a Safari:", err);
-        });
+        const reproductor = new Audio(tocMatx.fitxerAudio || "/sounds/canvi.mp3");
+        reproductor.play().catch((err) => console.warn("Interacció requerida a Safari:", err));
       }
     };
 
@@ -79,159 +72,77 @@ export default function Home() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "#0f172a",
-        color: "white",
-        display: "flex",
-        flexDirection: "column",
-        padding: "20px",
-        boxSizing: "border-box",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-      }}
-    >
-      {/* CAPÇALERA AMB L'ESTAT DE SESSIÓ */}
+    <div style={{ minHeight: "100vh", backgroundColor: "#0f172a", color: "white", display: "flex", flexDirection: "column", padding: "20px", boxSizing: "border-box", fontFamily: "sans-serif" }}>
+      
+      {/* Botó d'estat de sessió */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         {!isAdmin ? (
-          <Link
-            to="/configuracio"
-            style={{
-              color: "#38bdf8",
-              textDecoration: "none",
-              fontWeight: "bold",
-              fontSize: "0.95rem",
-              backgroundColor: "#1e293b",
-              padding: "8px 16px",
-              borderRadius: "8px",
-            }}
-          >
+          <Link to="/configuracio" style={{ color: "#38bdf8", textDecoration: "none", fontWeight: "bold", backgroundColor: "#1e293b", padding: "8px 16px", borderRadius: "8px" }}>
             🔒 Accés Admin
           </Link>
         ) : (
-          <button
-            onClick={logout}
-            style={{
-              backgroundColor: "#ef4444",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              padding: "8px 16px",
-              cursor: "pointer",
-              fontWeight: "bold",
-            }}
-          >
-            🔓 Tancar Sessió (Admin)
+          <button onClick={logout} style={{ backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "8px", padding: "8px 16px", cursor: "pointer", fontWeight: "bold" }}>
+            🔓 Tancar Sessió
           </button>
         )}
       </div>
 
-      {/* ZONA SUPERIOR: RELLOTGE I PRÒXIM TOC */}
-      <div
-        style={{
-          flex: "1",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      {/* Rellotge */}
+      <div style={{ flex: "1", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
         <Clock />
         <NextBell />
-
-        <div
-          style={{
-            fontSize: "1.4rem",
-            fontWeight: "bold",
-            marginTop: "10px",
-            marginBottom: "20px",
-            color: alarmesActives ? "#4ade80" : "#f87171",
-          }}
-        >
+        <div style={{ fontSize: "1.4rem", fontWeight: "bold", marginTop: "10px", color: alarmesActives ? "#4ade80" : "#f87171" }}>
           {alarmesActives ? "🟢 ALARMES ACTIVADES" : "🔴 ALARMES DESACTIVADES"}
         </div>
       </div>
 
-      {/* BOTONERA INFERIOR */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "15px",
-          width: "100%",
-          maxWidth: "900px",
-          margin: "0 auto",
-        }}
-      >
-        <Link to="/sons" style={estilLink}>
-          <button style={estilBoto}>
-            <span style={{ fontSize: "2rem" }}>🎵</span>
-            Banc de Sons
-          </button>
-        </Link>
-
-        <Link to="/tocs" style={estilLink}>
-          <button style={estilBoto}>
-            <span style={{ fontSize: "2rem" }}>🔔</span>
-            Tocs
-          </button>
-        </Link>
-
-        <Link to="/calendari" style={estilLink}>
-          <button style={estilBoto}>
-            <span style={{ fontSize: "2rem" }}>📅</span>
-            Calendari
-          </button>
-        </Link>
-
-        {/* NOMS I ACCIONS D'ADMINISTRACIÓ */}
-        <Link to="/configuracio" style={estilLink}>
-          <button style={estilBoto}>
-            <span style={{ fontSize: "2rem" }}>⚙️</span>
-            Configuració
-          </button>
-        </Link>
-
-        {/* Només un administrador pot pausar o activar les alarmes */}
+      {/* Botonera de control */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "15px", width: "100%", maxWidth: "900px", margin: "0 auto" }}>
+        
+        {/* Seccions restringides si no s'és Admin */}
         {isAdmin ? (
-          <button
-            style={{
-              ...estilBoto,
-              backgroundColor: alarmesActives ? "#16a34a" : "#dc2626",
-              color: "white",
-            }}
-            onClick={() => setAlarmesActives(!alarmesActives)}
-          >
-            <span style={{ fontSize: "2rem" }}>
-              {alarmesActives ? "⏸️" : "▶️"}
-            </span>
-            {alarmesActives ? "Desactivar" : "Activar"}
-          </button>
+          <Link to="/sons" style={estilLink}>
+            <button style={estilBoto}>🎵 Banc de Sons</button>
+          </Link>
         ) : (
-          <div
-            style={{
-              ...estilBoto,
-              backgroundColor: "#334155",
-              color: "#94a3b8",
-              cursor: "not-allowed",
-            }}
-          >
-            <span style={{ fontSize: "2rem" }}>🔒</span>
-            Estat: {alarmesActives ? "Actiu" : "Pausat"}
-          </div>
+          <button style={estilBotoBloquejat} disabled>🔒 Banc de Sons</button>
         )}
 
-        <button
-          style={{
-            ...estilBoto,
-            backgroundColor: "#dc2626",
-            color: "white",
-          }}
-          onClick={activarEvacuacio}
-        >
-          <span style={{ fontSize: "2rem" }}>🚨</span>
-          Evacuació
+        {isAdmin ? (
+          <Link to="/tocs" style={estilLink}>
+            <button style={estilBoto}>🔔 Tocs</button>
+          </Link>
+        ) : (
+          <button style={estilBotoBloquejat} disabled>🔒 Tocs</button>
+        )}
+
+        {isAdmin ? (
+          <Link to="/calendari" style={estilLink}>
+            <button style={estilBoto}>📅 Calendari</button>
+          </Link>
+        ) : (
+          <button style={estilBotoBloquejat} disabled>🔒 Calendari</button>
+        )}
+
+        {/* Configuració (Sempre visible per permetre el Login) */}
+        <Link to="/configuracio" style={estilLink}>
+          <button style={estilBoto}>⚙️ Configuració</button>
+        </Link>
+
+        {/* Activar/Desactivar global */}
+        {isAdmin ? (
+          <button style={{ ...estilBoto, backgroundColor: alarmesActives ? "#16a34a" : "#dc2626", color: "white" }} onClick={() => setAlarmesActives(!alarmesActives)}>
+            {alarmesActives ? "⏸️ Pausar" : "▶️ Activar"}
+          </button>
+        ) : (
+          <button style={estilBotoBloquejat} disabled>🔒 Pausar/Activar</button>
+        )}
+
+        {/* Evacuació (Sempre accessible) */}
+        <button style={{ ...estilBoto, backgroundColor: "#dc2626", color: "white" }} onClick={activarEvacuacio}>
+          🚨 Evacuació
         </button>
+
       </div>
     </div>
   );
