@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import Clock from "../components/Clock";
 import NextBell from "../components/NextBell";
 
@@ -25,14 +26,14 @@ const estilLink = {
   color: "inherit",
 };
 
-// Mapeig per comprovar el dia de la setmana en el mateix format que Tocs.jsx
 const DIES_MAP = ["dg", "dll", "dm", "dc", "dj", "dv", "ds"];
 
 export default function Home() {
+  const { isAdmin, logout } = useAuth();
   const [alarmesActives, setAlarmesActives] = useState(true);
   const [ultimTocSonat, setUltimTocSonat] = useState("");
 
-  // Comprovar tocs automàtics en temps real
+  // Els tocs funcionaran SEMPRE automàticament des de l'iPad
   useEffect(() => {
     if (!alarmesActives) return;
 
@@ -43,13 +44,11 @@ export default function Home() {
         minute: "2-digit",
       });
 
-      // Evitar que el mateix toc torne a sonar repetidament en el mateix minut
       if (ultimTocSonat === horaActual) return;
 
       const diaSetmana = DIES_MAP[ara.getDay()];
       const tocsGuardats = JSON.parse(localStorage.getItem("tocs")) || [];
 
-      // Cerquem un toc que coincidisc en hora, estiga actiu i toque hui
       const tocMatx = tocsGuardats.find(
         (toc) =>
           toc.actiu &&
@@ -60,16 +59,10 @@ export default function Home() {
 
       if (tocMatx) {
         setUltimTocSonat(horaActual);
-
-        // Utilitzem la URL de GitHub (fitxerAudio) guardada en Tocs.jsx
         const fitxerAudio = tocMatx.fitxerAudio || "/sounds/canvi.mp3";
         const reproductor = new Audio(fitxerAudio);
-
         reproductor.play().catch((err) => {
-          console.warn(
-            "Cal interacció prèvia de l'usuari en Safari/iPad per permetre l'àudio:",
-            err
-          );
+          console.warn("Cal interacció prèvia de l'usuari a Safari:", err);
         });
       }
     };
@@ -78,7 +71,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [alarmesActives, ultimTocSonat]);
 
-  // Funció per a l'evacuació d'emergència
   const activarEvacuacio = () => {
     if (window.confirm("🚨 VOLS ACTIVAR L'ALARMA D'EVACUACIÓ?")) {
       const audioEvacuacio = new Audio("/sounds/evacuacio.mp3");
@@ -99,6 +91,41 @@ export default function Home() {
         fontFamily: "system-ui, -apple-system, sans-serif",
       }}
     >
+      {/* CAPÇALERA AMB L'ESTAT DE SESSIÓ */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {!isAdmin ? (
+          <Link
+            to="/configuracio"
+            style={{
+              color: "#38bdf8",
+              textDecoration: "none",
+              fontWeight: "bold",
+              fontSize: "0.95rem",
+              backgroundColor: "#1e293b",
+              padding: "8px 16px",
+              borderRadius: "8px",
+            }}
+          >
+            🔒 Accés Admin
+          </Link>
+        ) : (
+          <button
+            onClick={logout}
+            style={{
+              backgroundColor: "#ef4444",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              padding: "8px 16px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            🔓 Tancar Sessió (Admin)
+          </button>
+        )}
+      </div>
+
       {/* ZONA SUPERIOR: RELLOTGE I PRÒXIM TOC */}
       <div
         style={{
@@ -157,6 +184,7 @@ export default function Home() {
           </button>
         </Link>
 
+        {/* NOMS I ACCIONS D'ADMINISTRACIÓ */}
         <Link to="/configuracio" style={estilLink}>
           <button style={estilBoto}>
             <span style={{ fontSize: "2rem" }}>⚙️</span>
@@ -164,19 +192,34 @@ export default function Home() {
           </button>
         </Link>
 
-        <button
-          style={{
-            ...estilBoto,
-            backgroundColor: alarmesActives ? "#16a34a" : "#dc2626",
-            color: "white",
-          }}
-          onClick={() => setAlarmesActives(!alarmesActives)}
-        >
-          <span style={{ fontSize: "2rem" }}>
-            {alarmesActives ? "⏸️" : "▶️"}
-          </span>
-          {alarmesActives ? "Desactivar" : "Activar"}
-        </button>
+        {/* Només un administrador pot pausar o activar les alarmes */}
+        {isAdmin ? (
+          <button
+            style={{
+              ...estilBoto,
+              backgroundColor: alarmesActives ? "#16a34a" : "#dc2626",
+              color: "white",
+            }}
+            onClick={() => setAlarmesActives(!alarmesActives)}
+          >
+            <span style={{ fontSize: "2rem" }}>
+              {alarmesActives ? "⏸️" : "▶️"}
+            </span>
+            {alarmesActives ? "Desactivar" : "Activar"}
+          </button>
+        ) : (
+          <div
+            style={{
+              ...estilBoto,
+              backgroundColor: "#334155",
+              color: "#94a3b8",
+              cursor: "not-allowed",
+            }}
+          >
+            <span style={{ fontSize: "2rem" }}>🔒</span>
+            Estat: {alarmesActives ? "Actiu" : "Pausat"}
+          </div>
+        )}
 
         <button
           style={{
