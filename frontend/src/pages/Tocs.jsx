@@ -1,442 +1,150 @@
-import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { bancSonsInicial } from "../data/bancSons";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase";
+import { ref, onValue, set } from "firebase/database";
 
 export default function Tocs() {
-  const [nom, setNom] = useState("");
+  const { isAdmin } = useAuth();
+  const [tocs, setTocs] = useState([]);
+  const [sonsDisponibles, setSonsDisponibles] = useState([]);
+  
   const [hora, setHora] = useState("");
-  const [horari, setHorari] = useState("Setembre-Juny");
+  const [nom, setNom] = useState("");
+  const [soSeleccionat, setSoSeleccionat] = useState("");
+  const [diesSeleccionats, setDiesSeleccionats] = useState(["dll", "dm", "dc", "dj", "dv"]);
 
-  // 1. Carreguem dinàmicament la llista de sons actualitzada (dels guardats a GitHub/localStorage)
-  const [llistaSons, setLlistaSons] = useState(() => {
-    const guardats = localStorage.getItem("bancSons");
-    return guardats ? JSON.parse(guardats) : bancSonsInicial;
-  });
-
-  const [so, setSo] = useState(llistaSons[0]?.nomVisible || "");
-
-  const [dies, setDies] = useState({
-    dll: true,
-    dm: true,
-    dc: true,
-    dj: true,
-    dv: true,
-  });
-
-  const [editantId, setEditantId] = useState(null);
-
-  const [tocs, setTocs] = useState(() => {
-    const guardats = localStorage.getItem("tocs");
-    return guardats ? JSON.parse(guardats) : [];
-  });
-
-  // Re-carregar sons si canvia l'emmagatzematge local
+  // Escuitar els tocs des de Firebase en temps real
   useEffect(() => {
-    const guardats = localStorage.getItem("bancSons");
-    if (guardats) {
-      setLlistaSons(JSON.parse(guardats));
-    }
+    const tocsRef = ref(db, "tocs");
+    const unsubscribe = onValue(tocsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setTocs(Object.values(data));
+      } else {
+        setTocs([]);
+      }
+    });
+
+    // Carregar sons disponibles des de localStorage
+    const sonsGuardats = JSON.parse(localStorage.getItem("bancSons")) || [];
+    setSonsDisponibles(sonsGuardats);
+    if (sonsGuardats.length > 0) setSoSeleccionat(sonsGuardats[0].fitxerAudio);
+
+    return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("tocs", JSON.stringify(tocs));
-  }, [tocs]);
-
-  const canviarDia = (dia) => {
-    setDies({
-      ...dies,
-      [dia]: !dies[dia],
-    });
+  // Guardar la llista completa a Firebase
+  const guardarADataBase = (nousTocs) => {
+    set(ref(db, "tocs"), nousTocs);
   };
 
-  const reiniciarFormulari = () => {
-    setNom("");
-    setHora("");
-    setHorari("Setembre-Juny");
-    setSo(llistaSons[0]?.nomVisible || "");
-    setDies({
-      dll: true,
-      dm: true,
-      dc: true,
-      dj: true,
-      dv: true,
-    });
-    setEditantId(null);
-  };
-
-  const guardarToc = () => {
-    if (!nom || !hora) {
-      alert("Cal indicar nom i hora");
-      return;
-    }
-
-    // Busquem l'objecte so per guardar-ne la URL completa de GitHub
-    const soTrobat = llistaSons.find((item) => item.nomVisible === so);
+  const afegirToc = (e) => {
+    e.preventDefault();
+    if (!hora || !nom) return;
 
     const nouToc = {
-      id: editantId || Date.now(),
-      nom,
+      id: Date.now().toString(),
       hora,
-      horari,
-      so,
-      fitxerAudio: soTrobat ? soTrobat.fitxer : "", // URL per a reproduir
-      dies: Object.keys(dies).filter((dia) => dies[dia]),
+      nom,
+      fitxerAudio: soSeleccionat,
+      dies: diesSeleccionats,
       actiu: true,
     };
 
-    if (editantId) {
-      setTocs(
-        tocs.map((toc) =>
-          toc.id === editantId
-            ? {
-                ...nouToc,
-                actiu: toc.actiu,
-              }
-            : toc
-        )
-      );
-    } else {
-      setTocs([...tocs, nouToc]);
-    }
+    const actualitzats = [...tocs, nouToc];
+    guardarADataBase(actualitzats);
 
-    reiniciarFormulari();
+    setHora("");
+    setNom("");
   };
 
-  const editarToc = (toc) => {
-    setEditantId(toc.id);
-    setNom(toc.nom);
-    setHora(toc.hora);
-    setHorari(toc.horari);
-    setSo(toc.so);
-
-    setDies({
-      dll: toc.dies.includes("dll"),
-      dm: toc.dies.includes("dm"),
-      dc: toc.dies.includes("dc"),
-      dj: toc.dies.includes("dj"),
-      dv: toc.dies.includes("dv"),
-    });
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+  const toggleActiu = (id) => {
+    const actualitzats = tocs.map((t) => (t.id === id ? { ...t, actiu: !t.actiu } : t));
+    guardarADataBase(actualitzats);
   };
 
   const eliminarToc = (id) => {
-    if (window.confirm("Vols eliminar aquest toc?")) {
-      setTocs(tocs.filter((toc) => toc.id !== id));
+    if (window.confirm("Vols eliminar aquest toc horari?")) {
+      const actualitzats = tocs.filter((t) => t.id !== id);
+      guardarADataBase(actualitzats);
     }
   };
 
-  const canviarEstat = (id) => {
-    setTocs(
-      tocs.map((toc) =>
-        toc.id === id
-          ? {
-              ...toc,
-              actiu: !toc.actiu,
-            }
-          : toc
-      )
-    );
-  };
-
-  // Estils comuns
-  const estilInput = {
-    width: "100%",
-    maxWidth: "400px",
-    padding: "12px 15px",
-    borderRadius: "10px",
-    border: "1px solid #475569",
-    backgroundColor: "#334155",
-    color: "#ffffff",
-    fontSize: "1rem",
-    outline: "none",
-    boxSizing: "border-box",
-  };
-
-  const estilLlegenda = {
-    display: "block",
-    color: "#cbd5e1",
-    fontSize: "0.95rem",
-    fontWeight: "600",
-    marginBottom: "6px",
-  };
-
-  const estilBotoAccio = {
-    padding: "8px 14px",
-    borderRadius: "8px",
-    border: "none",
-    color: "#ffffff",
-    cursor: "pointer",
-    fontWeight: "bold",
-    fontSize: "0.9rem",
+  const toggleDia = (dia) => {
+    if (diesSeleccionats.includes(dia)) {
+      setDiesSeleccionats(diesSeleccionats.filter((d) => d !== dia));
+    } else {
+      setDiesSeleccionats([...diesSeleccionats, dia]);
+    }
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "#0f172a",
-        color: "#ffffff",
-        padding: "30px 20px",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-      }}
-    >
+    <div style={{ minHeight: "100vh", backgroundColor: "#0f172a", color: "white", padding: "20px", fontFamily: "sans-serif" }}>
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-        
-        {/* ENCAPÇALAT */}
-        <h1
-          style={{
-            textAlign: "center",
-            marginBottom: "30px",
-            color: "#ffffff",
-            fontSize: "2.2rem",
-            fontWeight: "bold",
-          }}
-        >
-          🔔 Gestió de Tocs
-        </h1>
+        <h1 style={{ textAlign: "center", color: "#ffffff" }}>🔔 Gestió de Tocs Horaris</h1>
 
-        {/* FORMULARI */}
-        <div
-          style={{
-            backgroundColor: "#1e293b",
-            padding: "25px",
-            borderRadius: "16px",
-            marginBottom: "35px",
-            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.3)",
-          }}
-        >
-          <h2 style={{ color: "#ffffff", marginTop: 0, fontSize: "1.4rem", marginBottom: "20px" }}>
-            {editantId ? "✏️ Editar toc" : "➕ Nou toc"}
-          </h2>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-            <div>
-              <label style={estilLlegenda}>Nom del toc</label>
-              <input
-                type="text"
-                placeholder="Ex: Entrada matí, Pati, Canvi de classe..."
-                value={nom}
-                onChange={(e) => setNom(e.target.value)}
-                style={estilInput}
-              />
+        {isAdmin ? (
+          <form onSubmit={afegirToc} style={{ backgroundColor: "#1e293b", padding: "20px", borderRadius: "12px", marginBottom: "30px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <h3>Afegir nou toc horari</h3>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} required style={{ padding: "10px", borderRadius: "6px", border: "1px solid #475569", backgroundColor: "#0f172a", color: "white" }} />
+              <input type="text" placeholder="Nom del toc (ex: Entrada)" value={nom} onChange={(e) => setNom(e.target.value)} required style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "1px solid #475569", backgroundColor: "#0f172a", color: "white" }} />
             </div>
 
-            <div>
-              <label style={estilLlegenda}>Hora</label>
-              <input
-                type="time"
-                value={hora}
-                onChange={(e) => setHora(e.target.value)}
-                style={estilInput}
-              />
-            </div>
-
-            <div>
-              <label style={estilLlegenda}>Dies de la setmana</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "15px", marginTop: "8px" }}>
-                {[
-                  ["dll", "Dilluns"],
-                  ["dm", "Dimarts"],
-                  ["dc", "Dimecres"],
-                  ["dj", "Dijous"],
-                  ["dv", "Divendres"],
-                ].map(([clau, text]) => (
-                  <label
-                    key={clau}
-                    style={{
-                      color: "#ffffff",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      backgroundColor: "#334155",
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid #475569",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={dies[clau]}
-                      onChange={() => canviarDia(clau)}
-                      style={{ width: "16px", height: "16px", accentColor: "#2563eb" }}
-                    />
-                    {text}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label style={estilLlegenda}>Horari</label>
-              <select
-                value={horari}
-                onChange={(e) => setHorari(e.target.value)}
-                style={estilInput}
-              >
-                <option>Setembre-Juny</option>
-                <option>Octubre-Maig</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={estilLlegenda}>So associat</label>
-              <select
-                value={so}
-                onChange={(e) => setSo(e.target.value)}
-                style={estilInput}
-              >
-                {llistaSons.map((soItem) => (
-                  <option key={soItem.id} value={soItem.nomVisible}>
-                    {soItem.nomVisible}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-              <button
-                onClick={guardarToc}
-                style={{
-                  backgroundColor: "#2563eb",
-                  color: "#ffffff",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "12px 24px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  fontSize: "1rem",
-                }}
-              >
-                💾 Guardar Toc
-              </button>
-
-              {editantId && (
-                <button
-                  onClick={reiniciarFormulari}
-                  style={{
-                    backgroundColor: "#64748b",
-                    color: "#ffffff",
-                    border: "none",
-                    borderRadius: "10px",
-                    padding: "12px 20px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                    fontSize: "1rem",
-                  }}
-                >
-                  Cancel·lar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* LLISTA DE TOCS */}
-        <h2 style={{ color: "#ffffff", fontSize: "1.5rem", marginBottom: "20px" }}>
-          📋 Tocs programats
-        </h2>
-
-        {tocs.length === 0 ? (
-          <p style={{ color: "#94a3b8", backgroundColor: "#1e293b", padding: "20px", borderRadius: "12px", textAlign: "center" }}>
-            Encara no hi ha tocs programats.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-            {tocs
-              .sort((a, b) => a.hora.localeCompare(b.hora))
-              .map((toc) => (
-                <div
-                  key={toc.id}
-                  style={{
-                    backgroundColor: "#1e293b",
-                    padding: "20px",
-                    borderRadius: "16px",
-                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.3)",
-                    borderLeft: `6px solid ${toc.actiu ? "#22c55e" : "#ef4444"}`,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
-                    <div>
-                      <h3 style={{ margin: "0 0 10px 0", color: "#ffffff", fontSize: "1.3rem" }}>
-                        {toc.nom}
-                      </h3>
-
-                      <div style={{ color: "#f59e0b", fontWeight: "bold", fontSize: "1.1rem", marginBottom: "6px" }}>
-                        🕒 Hora: {toc.hora}
-                      </div>
-
-                      <div style={{ color: "#cbd5e1", fontSize: "0.95rem", marginBottom: "4px" }}>
-                        📅 Horari: {toc.horari} | 🎵 So: {toc.so}
-                      </div>
-
-                      <div style={{ color: "#cbd5e1", fontSize: "0.95rem" }}>
-                        📆 Dies: {toc.dies.join(", ")}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: "20px",
-                        backgroundColor: toc.actiu ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)",
-                        color: toc.actiu ? "#4ade80" : "#f87171",
-                        fontWeight: "bold",
-                        fontSize: "0.9rem",
-                      }}
-                    >
-                      {toc.actiu ? "🟢 Actiu" : "🔴 Inactiu"}
-                    </div>
-                  </div>
-
-                  <hr style={{ borderColor: "#334155", margin: "15px 0" }} />
-
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      style={{ ...estilBotoAccio, backgroundColor: "#0284c7" }}
-                      onClick={() => editarToc(toc)}
-                    >
-                      ✏️ Editar
-                    </button>
-
-                    <button
-                      style={{ ...estilBotoAccio, backgroundColor: toc.actiu ? "#d97706" : "#16a34a" }}
-                      onClick={() => canviarEstat(toc.id)}
-                    >
-                      {toc.actiu ? "⏸️ Desactivar" : "▶️ Activar"}
-                    </button>
-
-                    <button
-                      style={{ ...estilBotoAccio, backgroundColor: "#dc2626" }}
-                      onClick={() => eliminarToc(toc.id)}
-                    >
-                      🗑 Eliminar
-                    </button>
-                  </div>
-                </div>
+            <select value={soSeleccionat} onChange={(e) => setSoSeleccionat(e.target.value)} style={{ padding: "10px", borderRadius: "6px", border: "1px solid #475569", backgroundColor: "#0f172a", color: "white" }}>
+              {sonsDisponibles.map((so) => (
+                <option key={so.id} value={so.fitxerAudio}>{so.nomVisible}</option>
               ))}
+            </select>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "space-between" }}>
+              {["dll", "dm", "dc", "dj", "dv"].map((dia) => (
+                <label key={dia} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                  <input type="checkbox" checked={diesSeleccionats.includes(dia)} onChange={() => toggleDia(dia)} />
+                  {dia.toUpperCase()}
+                </label>
+              ))}
+            </div>
+
+            <button type="submit" style={{ backgroundColor: "#2563eb", color: "white", padding: "10px", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer" }}>
+              ➕ Programar Toc
+            </button>
+          </form>
+        ) : (
+          <div style={{ backgroundColor: "#334155", padding: "12px", borderRadius: "8px", textAlign: "center", marginBottom: "20px" }}>
+            🔒 Mode Lectura: Inicia sessió per a modificar els horaris.
           </div>
         )}
 
-        {/* ENLLAÇ TORNAR */}
-        <div style={{ textAlign: "center", marginTop: "35px" }}>
-          <Link
-            to="/"
-            style={{
-              color: "#38bdf8",
-              textDecoration: "none",
-              fontWeight: "bold",
-              fontSize: "1.1rem",
-            }}
-          >
-            ← Tornar al panell principal
-          </Link>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {tocs.map((toc) => (
+            <div key={toc.id} style={{ backgroundColor: "#1e293b", padding: "15px", borderRadius: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <span style={{ fontSize: "1.2rem", fontWeight: "bold", marginRight: "10px" }}>{toc.hora}</span>
+                <span>{toc.nom}</span>
+                <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: "4px" }}>
+                  Dies: {toc.dies?.join(", ").toUpperCase()}
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button onClick={() => toggleActiu(toc.id)} style={{ backgroundColor: toc.actiu ? "#16a34a" : "#64748b", color: "white", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer" }}>
+                    {toc.actiu ? "Actiu" : "Inactiu"}
+                  </button>
+                  <button onClick={() => eliminarToc(toc.id)} style={{ backgroundColor: "#dc2626", color: "white", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer" }}>
+                    🗑️
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
+        <div style={{ textAlign: "center", marginTop: "30px" }}>
+          <Link to="/" style={{ color: "#38bdf8", textDecoration: "none", fontWeight: "bold" }}>← Tornar al panell principal</Link>
+        </div>
       </div>
     </div>
   );

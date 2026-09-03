@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Clock from "../components/Clock";
 import NextBell from "../components/NextBell";
+import { db } from "../firebase";
+import { ref, onValue } from "firebase/database";
 
 const estilBoto = {
   height: "110px",
@@ -36,8 +38,24 @@ export default function Home() {
   const { isAdmin, logout } = useAuth();
   const [alarmesActives, setAlarmesActives] = useState(true);
   const [ultimTocSonat, setUltimTocSonat] = useState("");
+  const [tocs, setTocs] = useState([]);
 
-  // Execució automàtica contínua
+  // 1. Carregar els tocs en temps real des de Firebase
+  useEffect(() => {
+    const tocsRef = ref(db, "tocs");
+    const unsubscribe = onValue(tocsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setTocs(Object.values(data));
+      } else {
+        setTocs([]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Execució automàtica contínua segons l'hora
   useEffect(() => {
     if (!alarmesActives) return;
 
@@ -47,9 +65,8 @@ export default function Home() {
       if (ultimTocSonat === horaActual) return;
 
       const diaSetmana = DIES_MAP[ara.getDay()];
-      const tocsGuardats = JSON.parse(localStorage.getItem("tocs")) || [];
 
-      const tocMatx = tocsGuardats.find(
+      const tocMatx = tocs.find(
         (toc) => toc.actiu && toc.hora === horaActual && toc.dies?.includes(diaSetmana)
       );
 
@@ -62,12 +79,19 @@ export default function Home() {
 
     const interval = setInterval(comprovarHoraToc, 1000);
     return () => clearInterval(interval);
-  }, [alarmesActives, ultimTocSonat]);
+  }, [alarmesActives, ultimTocSonat, tocs]);
 
+  // Funció d'evacuació que llegeix la configuració
   const activarEvacuacio = () => {
     if (window.confirm("🚨 VOLS ACTIVAR L'ALARMA D'EVACUACIÓ?")) {
-      const audioEvacuacio = new Audio("/sounds/evacuacio.mp3");
-      audioEvacuacio.play();
+      const configGuardada = JSON.parse(localStorage.getItem("configuracioAlarma")) || {};
+      const soEvacuacio = configGuardada.soEvacuacio || "/sounds/evacuacio.mp3";
+
+      const audioEvacuacio = new Audio(soEvacuacio);
+      audioEvacuacio.play().catch((err) => {
+        alert("Error en reproduir l'àudio d'evacuació. Revisa l'enllaç a Configuració o la connexió.");
+        console.error(err);
+      });
     }
   };
 
@@ -124,7 +148,7 @@ export default function Home() {
           <button style={estilBotoBloquejat} disabled>🔒 Calendari</button>
         )}
 
-        {/* Configuració (Sempre visible per permetre el Login) */}
+        {/* Configuració (Sempre accessible) */}
         <Link to="/configuracio" style={estilLink}>
           <button style={estilBoto}>⚙️ Configuració</button>
         </Link>
