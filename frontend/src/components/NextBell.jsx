@@ -1,88 +1,51 @@
 import { useState, useEffect } from "react";
+import { db } from "../firebase";
+import { ref, onValue } from "firebase/database";
+
+const DIES_MAP = ["dg", "dll", "dm", "dc", "dj", "dv", "ds"];
 
 export default function NextBell() {
   const [proximToc, setProximToc] = useState(null);
 
   useEffect(() => {
-    const calcularProximToc = () => {
-      // Carregar tocs del localStorage o usar un array buit
-      const tocsGuardats = JSON.parse(localStorage.getItem("tocs")) || [];
-      
-      const ara = new Date();
-      const horaActualMinuts = ara.getHours() * 60 + ara.getMinutes();
-
-      // Filtrar els tocs que són més tard que l'hora actual
-      const tocsFuturs = tocsGuardats
-        .map((toc) => {
-          const [hores, minuts] = toc.hora.split(":").map(Number);
-          return { ...toc, minutsTotals: hores * 60 + minuts };
-        })
-        .filter((toc) => toc.minutsTotals > horaActualMinuts)
-        .sort((a, b) => a.minutsTotals - b.minutsTotals);
-
-      if (tocsFuturs.length > 0) {
-        setProximToc(tocsFuturs[0]);
-      } else {
+    const tocsRef = ref(db, "tocs");
+    const unsubscribe = onValue(tocsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
         setProximToc(null);
+        return;
       }
-    };
 
-    calcularProximToc();
-    const interval = setInterval(calcularProximToc, 10000); // Recalcular cada 10s
+      const llistaTocs = Object.values(data);
+      comprovarProxim(llistaTocs);
+    });
 
-    return () => clearInterval(interval);
+    return () => unsubscribe();
   }, []);
 
-  return (
-    <div
-      style={{
-        textAlign: "center",
-        backgroundColor: "#1e293b",
-        padding: "20px",
-        borderRadius: "16px",
-        margin: "20px auto",
-        maxWidth: "400px",
-        border: "1px solid #334155",
-      }}
-    >
-      <span
-        style={{
-          fontSize: "0.9rem",
-          color: "#38bdf8",
-          fontWeight: "bold",
-          letterSpacing: "1px",
-        }}
-      >
-        PRÒXIM TOC
-      </span>
+  const comprovarProxim = (tocs) => {
+    const ara = new Date();
+    const diaSetmana = DIES_MAP[ara.getDay()];
+    const horaActual = ara.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" });
 
+    // Filtrar tocs d'avui que estiguen i siguen posteriors a l'hora actual
+    const tocsAvui = tocs
+      .filter((t) => t.actiu && t.dies?.includes(diaSetmana) && t.hora > horaActual)
+      .sort((a, b) => a.hora.localeCompare(b.hora));
+
+    if (tocsAvui.length > 0) {
+      setProximToc(tocsAvui[0]);
+    } else {
+      setProximToc(null);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: "15px", fontSize: "1.2rem", color: "#38bdf8", fontWeight: "bold" }}>
       {proximToc ? (
-        <div style={{ marginTop: "8px" }}>
-          <h2
-            style={{
-              fontSize: "2rem",
-              color: "#ffffff",
-              margin: "5px 0",
-              fontWeight: "bold",
-            }}
-          >
-            {proximToc.nom}
-          </h2>
-          <p
-            style={{
-              fontSize: "1.5rem",
-              color: "#f59e0b",
-              margin: 0,
-              fontWeight: "bold",
-            }}
-          >
-            🔔 {proximToc.hora}
-          </p>
-        </div>
+        <span>🔔 Pròxim toc: {proximToc.hora} - {proximToc.nom}</span>
       ) : (
-        <p style={{ color: "#94a3b8", marginTop: "10px", fontSize: "1.1rem" }}>
-          No hi ha més tocs programats per a hui 😴
-        </p>
+        <span>🔕 No hi ha més tocs programats per a hui</span>
       )}
     </div>
   );

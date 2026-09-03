@@ -34,6 +34,19 @@ const estilBotoBloquejat = {
 const estilLink = { textDecoration: "none", color: "inherit" };
 const DIES_MAP = ["dg", "dll", "dm", "dc", "dj", "dv", "ds"];
 
+// Funció optimitzada per a Google Drive i fitxers grans (MP3)
+const convertirUrlAudio = (url) => {
+  if (!url) return "/sounds/canvi.mp3";
+  if (url.includes("drive.google.com")) {
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      // Enllaç directe que se salta la vista prèvia i l'avís de virus de Drive
+      return `https://drive.usercontent.google.com/download?id=${match[1]}&export=download`;
+    }
+  }
+  return url;
+};
+
 export default function Home() {
   const { isAdmin, logout } = useAuth();
   const [alarmesActives, setAlarmesActives] = useState(true);
@@ -72,8 +85,9 @@ export default function Home() {
 
       if (tocMatx) {
         setUltimTocSonat(horaActual);
-        const reproductor = new Audio(tocMatx.fitxerAudio || "/sounds/canvi.mp3");
-        reproductor.play().catch((err) => console.warn("Interacció requerida a Safari:", err));
+        const urlDirecta = convertirUrlAudio(tocMatx.fitxerAudio);
+        const reproductor = new Audio(urlDirecta);
+        reproductor.play().catch((err) => console.warn("Interacció requerida a Safari/Chrome:", err));
       }
     };
 
@@ -81,15 +95,15 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [alarmesActives, ultimTocSonat, tocs]);
 
-  // Funció d'evacuació que llegeix la configuració
+  // Funció d'evacuació
   const activarEvacuacio = () => {
     if (window.confirm("🚨 VOLS ACTIVAR L'ALARMA D'EVACUACIÓ?")) {
       const configGuardada = JSON.parse(localStorage.getItem("configuracioAlarma")) || {};
-      const soEvacuacio = configGuardada.soEvacuacio || "/sounds/evacuacio.mp3";
+      const urlDirecta = convertirUrlAudio(configGuardada.soEvacuacio || "/sounds/evacuacio.mp3");
 
-      const audioEvacuacio = new Audio(soEvacuacio);
+      const audioEvacuacio = new Audio(urlDirecta);
       audioEvacuacio.play().catch((err) => {
-        alert("Error en reproduir l'àudio d'evacuació. Revisa l'enllaç a Configuració o la connexió.");
+        alert("Error en reproduir l'àudio d'evacuació. Revisa l'enllaç o la connexió.");
         console.error(err);
       });
     }
@@ -123,7 +137,6 @@ export default function Home() {
       {/* Botonera de control */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "15px", width: "100%", maxWidth: "900px", margin: "0 auto" }}>
         
-        {/* Seccions restringides si no s'és Admin */}
         {isAdmin ? (
           <Link to="/sons" style={estilLink}>
             <button style={estilBoto}>🎵 Banc de Sons</button>
@@ -148,12 +161,10 @@ export default function Home() {
           <button style={estilBotoBloquejat} disabled>🔒 Calendari</button>
         )}
 
-        {/* Configuració (Sempre accessible) */}
         <Link to="/configuracio" style={estilLink}>
           <button style={estilBoto}>⚙️ Configuració</button>
         </Link>
 
-        {/* Activar/Desactivar global */}
         {isAdmin ? (
           <button style={{ ...estilBoto, backgroundColor: alarmesActives ? "#16a34a" : "#dc2626", color: "white" }} onClick={() => setAlarmesActives(!alarmesActives)}>
             {alarmesActives ? "⏸️ Pausar" : "▶️ Activar"}
@@ -162,7 +173,6 @@ export default function Home() {
           <button style={estilBotoBloquejat} disabled>🔒 Pausar/Activar</button>
         )}
 
-        {/* Evacuació (Sempre accessible) */}
         <button style={{ ...estilBoto, backgroundColor: "#dc2626", color: "white" }} onClick={activarEvacuacio}>
           🚨 Evacuació
         </button>
