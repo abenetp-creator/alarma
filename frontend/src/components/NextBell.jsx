@@ -9,8 +9,10 @@ export default function NextBell() {
   const [audioActivat, setAudioActivat] = useState(false);
   const tocsRefData = useRef([]);
   const ultimsTocsSonats = useRef(new Set());
+  
+  // Element d'àudio persistent creat en la primera interacció de l'usuari
+  const audioPlayerRef = useRef(null);
 
-  // Funció auxiliar per obtindre l'hora actual en format "HH:MM" (24h) de manera 100% fiable
   const getHoraActual24h = () => {
     const ara = new Date();
     const hores = String(ara.getHours()).padStart(2, "0");
@@ -37,7 +39,7 @@ export default function NextBell() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Rellotge que comprova cada segon l'hora exacta
+  // 2. Rellotge que comprova el minut exacte
   useEffect(() => {
     const interval = setInterval(() => {
       const ara = new Date();
@@ -47,7 +49,6 @@ export default function NextBell() {
 
       comprovarProxim(tocsRefData.current);
 
-      // Disparar el so als 00 segons del minut corresponent
       if (segonsActuals === 0) {
         const tocsAra = tocsRefData.current.filter(
           (t) => t.actiu && t.dies?.includes(diaSetmana) && t.hora === horaMinutActual
@@ -70,7 +71,6 @@ export default function NextBell() {
     return () => clearInterval(interval);
   }, []);
 
-  // 3. Comprovar el pròxim toc de hui
   const comprovarProxim = (tocs) => {
     const ara = new Date();
     const diaSetmana = DIES_MAP[ara.getDay()];
@@ -83,7 +83,7 @@ export default function NextBell() {
     setProximToc(tocsAvui.length > 0 ? tocsAvui[0] : null);
   };
 
-  // 4. Reproducció de l'àudio
+  // 3. Reproduir utilitzant l'àudio ja "desbloquejat" per iOS
   const reproduirSo = (toc) => {
     const audioUrl = toc.fitxerAudio || toc.url || toc.urlAudio;
 
@@ -92,25 +92,43 @@ export default function NextBell() {
       return;
     }
 
-    const reproductor = new Audio(audioUrl);
-    reproductor
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new Audio();
+    }
+
+    // Assignar nova font i reproduir directament sobre la instància inicialitzada
+    audioPlayerRef.current.src = audioUrl;
+    audioPlayerRef.current.currentTime = 0;
+    
+    audioPlayerRef.current
       .play()
       .then(() => {
-        console.log("🔔 Reproduint so a l'iPad/PC:", toc.nom);
+        console.log("🔔 Reproduint so correctament:", toc.nom);
       })
       .catch((err) => {
-        console.error("❌ Error en reproduir l'àudio a l'iPad:", err);
+        console.error("❌ iOS continua bloquejant la reproducció automàtica:", err);
       });
   };
 
-  // 5. Activar àudio a l'iPad
+  // 4. Activar/Desbloquejar la instància d'àudio per a l'iPad
   const activarAudioInicial = () => {
-    const audioTest = new Audio("https://res.cloudinary.com/jpttonqs/video/upload/v1/sample.mp3");
-    audioTest.volume = 0;
-    audioTest
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new Audio();
+    }
+    
+    // So "mut" inicial per a donar permisos a l'element d'àudio a la memòria de Safari
+    audioPlayerRef.current.src = "https://res.cloudinary.com/jpttonqs/video/upload/v1/sample.mp3";
+    
+    audioPlayerRef.current
       .play()
-      .then(() => setAudioActivat(true))
-      .catch(() => setAudioActivat(true));
+      .then(() => {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.currentTime = 0;
+        setAudioActivat(true);
+      })
+      .catch(() => {
+        setAudioActivat(true);
+      });
   };
 
   return (
@@ -123,14 +141,15 @@ export default function NextBell() {
               backgroundColor: "#22c55e",
               color: "white",
               border: "none",
-              padding: "10px 20px",
+              padding: "12px 24px",
               borderRadius: "8px",
               fontWeight: "bold",
+              fontSize: "1rem",
               cursor: "pointer",
               boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)",
             }}
           >
-            🔊 Activar Àudio de l'iPad / Navegador
+            🔊 Activar Àudio de l'iPad
           </button>
         </div>
       )}
