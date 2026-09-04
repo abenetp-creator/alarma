@@ -10,6 +10,14 @@ export default function NextBell() {
   const tocsRefData = useRef([]);
   const ultimsTocsSonats = useRef(new Set());
 
+  // Funció auxiliar per obtindre l'hora actual en format "HH:MM" (24h) de manera 100% fiable
+  const getHoraActual24h = () => {
+    const ara = new Date();
+    const hores = String(ara.getHours()).padStart(2, "0");
+    const minuts = String(ara.getMinutes()).padStart(2, "0");
+    return `${hores}:${minuts}`;
+  };
+
   // 1. Carregar tocs des de Firebase
   useEffect(() => {
     const tocsRef = ref(db, "tocs");
@@ -29,17 +37,17 @@ export default function NextBell() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Rellotge que comprova cada segons si cal reproduir el so
+  // 2. Rellotge que comprova cada segon l'hora exacta
   useEffect(() => {
     const interval = setInterval(() => {
       const ara = new Date();
       const diaSetmana = DIES_MAP[ara.getDay()];
-      const horaMinutActual = ara.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" });
+      const horaMinutActual = getHoraActual24h();
       const segonsActuals = ara.getSeconds();
 
       comprovarProxim(tocsRefData.current);
 
-      // Comprovar si hi ha un toc exactament en aquest minut (als 00 segons)
+      // Disparar el so als 00 segons del minut corresponent
       if (segonsActuals === 0) {
         const tocsAra = tocsRefData.current.filter(
           (t) => t.actiu && t.dies?.includes(diaSetmana) && t.hora === horaMinutActual
@@ -51,7 +59,6 @@ export default function NextBell() {
             reproduirSo(toc);
             ultimsTocsSonats.current.add(clauToc);
 
-            // Neteja del registre passat 1 minut
             setTimeout(() => {
               ultimsTocsSonats.current.delete(clauToc);
             }, 60000);
@@ -63,11 +70,11 @@ export default function NextBell() {
     return () => clearInterval(interval);
   }, []);
 
-  // 3. Funció per a trobar el pròxim toc
+  // 3. Comprovar el pròxim toc de hui
   const comprovarProxim = (tocs) => {
     const ara = new Date();
     const diaSetmana = DIES_MAP[ara.getDay()];
-    const horaActual = ara.toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" });
+    const horaActual = getHoraActual24h();
 
     const tocsAvui = tocs
       .filter((t) => t.actiu && t.dies?.includes(diaSetmana) && t.hora > horaActual)
@@ -76,13 +83,12 @@ export default function NextBell() {
     setProximToc(tocsAvui.length > 0 ? tocsAvui[0] : null);
   };
 
-  // 4. Reproducció de l'àudio compatible amb Cloudinary i iPad
+  // 4. Reproducció de l'àudio
   const reproduirSo = (toc) => {
-    // Cerca la ruta en qualsevol dels camps possibles
     const audioUrl = toc.fitxerAudio || toc.url || toc.urlAudio;
 
     if (!audioUrl) {
-      console.error("⚠️ No s'ha trobat cap URL d'àudio vàlida per al toc:", toc);
+      console.error("⚠️ No s'ha trobat URL d'àudio per al toc:", toc);
       return;
     }
 
@@ -90,25 +96,21 @@ export default function NextBell() {
     reproductor
       .play()
       .then(() => {
-        console.log("🔔 Reproduint so:", toc.nom);
+        console.log("🔔 Reproduint so a l'iPad/PC:", toc.nom);
       })
       .catch((err) => {
-        console.error("❌ Error en reproduir l'àudio (bloqueig del navegador?):", err);
+        console.error("❌ Error en reproduir l'àudio a l'iPad:", err);
       });
   };
 
-  // 5. Permís inicial per a desbloquejar Safari/iOS a l'iPad
+  // 5. Activar àudio a l'iPad
   const activarAudioInicial = () => {
     const audioTest = new Audio("https://res.cloudinary.com/jpttonqs/video/upload/v1/sample.mp3");
     audioTest.volume = 0;
     audioTest
       .play()
-      .then(() => {
-        setAudioActivat(true);
-      })
-      .catch(() => {
-        setAudioActivat(true);
-      });
+      .then(() => setAudioActivat(true))
+      .catch(() => setAudioActivat(true));
   };
 
   return (
