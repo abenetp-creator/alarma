@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
-import { ref, onValue, push, remove, update } from "firebase/database";
+import { ref, onValue, push, remove, update, set } from "firebase/database";
 
 export default function Tocs() {
+  const [tipusHorari, setTipusHorari] = useState("octubre_maig"); // "setembre_juny" o "octubre_maig"
   const [hora, setHora] = useState("");
   const [nom, setNom] = useState("");
   const [soSeleccionat, setSoSeleccionat] = useState("");
@@ -20,7 +21,17 @@ export default function Tocs() {
   const [llistaTocs, setLlistaTocs] = useState([]);
   const [audioEnReproduccio, setAudioEnReproduccio] = useState(null);
 
-  // 1. Carregar els sons des del Banc de Sons en temps real
+  // 1. Carregar quin horari està actiu actualment a l'escola
+  useEffect(() => {
+    const configRef = ref(db, "configuracio/horariActiu");
+    const unsubscribe = onValue(configRef, (snapshot) => {
+      const val = snapshot.val();
+      if (val) setTipusHorari(val);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Carregar els sons des del Banc de Sons
   useEffect(() => {
     const sonsRef = ref(db, "sons");
     const unsubscribe = onValue(sonsRef, (snapshot) => {
@@ -43,9 +54,9 @@ export default function Tocs() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Carregar els tocs programats
+  // 3. Carregar els tocs del tipus d'horari seleccionat
   useEffect(() => {
-    const tocsRef = ref(db, "tocs");
+    const tocsRef = ref(db, `tocs/${tipusHorari}`);
     const unsubscribe = onValue(tocsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -60,7 +71,12 @@ export default function Tocs() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [tipusHorari]);
+
+  const canviarHorariActiu = async (nouTipus) => {
+    setTipusHorari(nouTipus);
+    await set(ref(db, "configuracio/horariActiu"), nouTipus);
+  };
 
   const handleCheckboxChange = (dia) => {
     setDies((prev) => ({ ...prev, [dia]: !prev[dia] }));
@@ -87,8 +103,7 @@ export default function Tocs() {
 
     try {
       if (idEnEdicio) {
-        // Mode Actualització
-        const tocRef = ref(db, `tocs/${idEnEdicio}`);
+        const tocRef = ref(db, `tocs/${tipusHorari}/${idEnEdicio}`);
         await update(tocRef, {
           hora,
           nom,
@@ -97,8 +112,7 @@ export default function Tocs() {
         });
         alert("✏️ Toc actualitzat correctament!");
       } else {
-        // Mode Nou Toc
-        const tocsRef = ref(db, "tocs");
+        const tocsRef = ref(db, `tocs/${tipusHorari}`);
         await push(tocsRef, {
           hora,
           nom,
@@ -129,51 +143,74 @@ export default function Tocs() {
       });
     }
     setDies(nousDies);
-
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const esborrarToc = async (id) => {
     if (window.confirm("Vols eliminar aquest toc horari?")) {
-      await remove(ref(db, `tocs/${id}`));
-      if (idEnEdicio === id) {
-        netejarFormulari();
-      }
+      await remove(ref(db, `tocs/${tipusHorari}/${id}`));
+      if (idEnEdicio === id) netejarFormulari();
     }
   };
 
   const provarSo = (urlAudio) => {
-    if (!urlAudio) {
-      alert("⚠️ Aquest toc no té cap àudio vàlid associat.");
-      return;
-    }
-
+    if (!urlAudio) return alert("⚠️ No té àudio associat.");
     if (audioEnReproduccio) {
       audioEnReproduccio.pause();
       audioEnReproduccio.currentTime = 0;
     }
-
     const audio = new Audio(urlAudio);
     setAudioEnReproduccio(audio);
-
-    audio.play().catch((err) => {
-      console.error("Error reproduint el so:", err);
-      alert("❌ Error en reproduir el so.");
-    });
+    audio.play().catch(() => alert("❌ Error en reproduir l'àudio."));
   };
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#0f172a", color: "#f8fafc", padding: "30px 20px", fontFamily: "sans-serif", boxSizing: "border-box" }}>
       <div style={{ maxWidth: "700px", margin: "0 auto" }}>
         
-        <h1 style={{ textAlign: "center", marginBottom: "30px", fontSize: "2.2rem", fontWeight: "800" }}>
+        <h1 style={{ textAlign: "center", marginBottom: "20px", fontSize: "2.2rem", fontWeight: "800" }}>
           🔔 Gestió de Tocs Horaris
         </h1>
+
+        {/* Selecció d'Horari d'Escola */}
+        <div style={{ backgroundColor: "#1e293b", padding: "15px 20px", borderRadius: "12px", marginBottom: "25px", border: "1px solid #38bdf8", textAlign: "center" }}>
+          <p style={{ margin: "0 0 10px 0", color: "#94a3b8", fontWeight: "bold" }}>📅 Selecciona el període escolar horari:</p>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+            <button
+              onClick={() => canviarHorariActiu("octubre_maig")}
+              style={{
+                padding: "10px 18px",
+                borderRadius: "8px",
+                border: "none",
+                fontWeight: "bold",
+                cursor: "pointer",
+                backgroundColor: tipusHorari === "octubre_maig" ? "#38bdf8" : "#0f172a",
+                color: tipusHorari === "octubre_maig" ? "#0f172a" : "#f8fafc",
+              }}
+            >
+              🍂 Octubre - Maig
+            </button>
+            <button
+              onClick={() => canviarHorariActiu("setembre_juny")}
+              style={{
+                padding: "10px 18px",
+                borderRadius: "8px",
+                border: "none",
+                fontWeight: "bold",
+                cursor: "pointer",
+                backgroundColor: tipusHorari === "setembre_juny" ? "#38bdf8" : "#0f172a",
+                color: tipusHorari === "setembre_juny" ? "#0f172a" : "#f8fafc",
+              }}
+            >
+              ☀️ Setembre / Juny
+            </button>
+          </div>
+        </div>
 
         {/* Formulari d'afegir / editar toc */}
         <div style={{ backgroundColor: "#1e293b", padding: "25px", borderRadius: "16px", marginBottom: "30px", border: idEnEdicio ? "2px solid #eab308" : "1px solid #334155" }}>
           <h2 style={{ marginTop: 0, fontSize: "1.25rem", color: idEnEdicio ? "#eab308" : "#38bdf8", marginBottom: "20px", textAlign: "center" }}>
-            {idEnEdicio ? "✏️ Editar Toc Horari" : "Afegir nou toc horari"}
+            {idEnEdicio ? "✏️ Editar Toc Horari" : `Afegir toc a l'horari: ${tipusHorari === "setembre_juny" ? "Setembre/Juny" : "Octubre-Maig"}`}
           </h2>
 
           <form onSubmit={guardarToc}>
@@ -250,10 +287,12 @@ export default function Tocs() {
 
         {/* Llista de Tocs Programats */}
         <div style={{ backgroundColor: "#1e293b", padding: "25px", borderRadius: "16px", border: "1px solid #334155", marginBottom: "30px" }}>
-          <h2 style={{ marginTop: 0, fontSize: "1.25rem", color: "#38bdf8", marginBottom: "20px" }}>Tocs Programats</h2>
+          <h2 style={{ marginTop: 0, fontSize: "1.25rem", color: "#38bdf8", marginBottom: "20px" }}>
+            Tocs Programats ({tipusHorari === "setembre_juny" ? "Setembre/Juny" : "Octubre-Maig"})
+          </h2>
 
           {llistaTocs.length === 0 ? (
-            <p style={{ color: "#94a3b8", textAlign: "center" }}>No hi ha cap toc programat.</p>
+            <p style={{ color: "#94a3b8", textAlign: "center" }}>No hi ha cap toc programat en aquest horari.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {llistaTocs.map((t) => (
